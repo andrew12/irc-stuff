@@ -1,0 +1,6 @@
+{EventEmitter} = require 'events'
+
+module.exports =
+  class Server
+    (@{conn, sid, link, name, desc}) ->
+      @users = {}

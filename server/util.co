@@ -1,0 +1,6 @@
+export
+  toLowerCase = (str) ->
+    str.toLowerCase!
+
+  equals = (a, b) ->
+    toLowerCase(a) === toLowerCase(b)

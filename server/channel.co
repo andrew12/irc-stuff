@@ -1,0 +1,66 @@
+_ = require \underscore
+
+module.exports =
+  class Channel
+    ({@conn, @name, ts}) ->
+      @ts = parseInt ts
+    
+      @modes = {}
+      @members = {}
+
+    STATUS = \ov
+    FLAGS = \aimnqpsrtFLPQcgz
+    PARAM = \kl
+    LIST = \beI
+    PREFIX = \@ : \o, \+ : \v
+  
+    parse_mode: !(modes, ...params) ->
+      console.log \cmode
+      while modes.length > 0
+        c = modes[0]
+        if c === \+ || c === \-
+          type = c
+        else
+          if _.contains STATUS, c
+            if type === \+
+              @members[params.shift!][c] = true
+            else if type === \-
+              delete @members[params.shift!][c]
+          else if _.contains FLAGS, c
+            if type === \+
+              @modes[c] = true
+            else if type === \-
+              delete @modes[c]
+          else if _.contains PARAM, c
+            if type === \+
+              @modes[c] = params.shift!
+            else if type === \-
+              delete @modes[c]
+          else if _.contains LIST, c
+            @modes[c] ||= []
+            if type === \+
+              @modes[c]push params.shift!
+            else if type === \-
+              @modes[c]splice @modes[c]indexOf(params.shift!), 1
+              if @modes[c]length === 0
+                delete @modes[c]
+        modes = modes.slice 1
+  
+    parse_sjoin: !(nicklist) ->
+      console.log \sjoin
+      for u of nicklist.split /\s+/
+        modes = {}
+        
+        while m = PREFIX[u[0]]
+          modes[m] = true
+          u = u.slice 1
+
+        @members[u] = modes
+        @conn.users[u]channels[@name] = true
+  
+    parse_bmask: !(type, masks) ->
+      console.log \bmask
+      if _.contains LIST, type
+        @modes[type] ||= []
+        for mask of masks.split /\s+/
+          @modes[type]push mask

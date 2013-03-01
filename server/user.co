@@ -1,0 +1,21 @@
+{EventEmitter} = require 'events'
+
+module.exports =
+  class User
+    ({@conn, @sid, @nick, ts, @user, @host, @ip, @uid, @gecos}) ->
+      @ts = parseInt ts
+    
+      @modes = {}
+      @channels = {}
+  
+    parse_mode: !(modes) ->
+      while modes.length > 0
+        c = modes[0]
+        if c === \+ || c === \-
+          type = c
+        else
+          if type === \+
+            @modes[c] = true
+          else if type === \-
+            delete @modes[c]
+        modes = modes.slice 1

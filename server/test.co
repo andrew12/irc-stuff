@@ -1,0 +1,13 @@
+{inspect} = require \util
+Connection = require \./connection
+
+conn = new Connection do
+  port: 6001
+  host: \localhost
+  sid: \777
+  pass: \password
+  name: \services.int
+  desc: 'not actually irc services'
+
+process.openStdin!on \data, ->
+  console.log inspect conn, false, null, true

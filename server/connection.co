@@ -1,0 +1,117 @@
+net = require \net
+{EventEmitter} = require \events
+
+_ = require \underscore
+es = require \event-stream
+{parse, serialize} = require \irc-parse
+
+User = require \./user
+Server = require \./server
+Channel = require \./channel
+
+module.exports =
+  class Connection extends EventEmitter
+    (@{sid, host, port, name, desc, pass}) ->
+      super!
+    
+      @users = {}
+      @servers = {}
+      @chans = {}
+      @current_id = \AAAAAA
+
+      @socket = es.pipeline do
+        es.mapSync (line) ->
+          console.log "-> #line"
+          "#line\r\n"
+        net.connect @port, @host
+        es.split /\r?\n/
+        es.mapSync (line) ~>
+          console.log "<- #line"
+          @emit \message parse line
+          line
+
+      @on \message !(m) ->
+        @emit m.command.toUpperCase!, m.prefix, ...m.params
+
+      @on \PING !(, ...params) ->
+        @send @sid, \PONG ...params
+
+      @servers[@sid] = new Server {conn: @, @sid, @name, @desc}
+
+      @send null \PASS @pass, \TS 6 @sid
+      @send null \CAPAB 'QS ENCAP EX IE'
+      @send null \SERVER @name, 1 @desc
+
+      @once \PASS !(, pass, ts, ver, sid) ->
+        if pass !== @pass
+          throw new Error 'password mismatch'
+        else if ts !== \TS
+          throw new Error 'second argument is not "TS"'
+        else if ver !== \6
+          throw new Error 'TS version is not 6'
+        else
+          @uplink = sid
+          @servers[@uplink] = new Server {conn: @, link: @sid, sid: @uplink}
+          @servers[@sid]link = @uplink
+
+      @once \SERVER !(, name, hops, desc) ->
+        serv = @servers[@uplink]
+        serv.name = name
+        serv.desc = desc
+        @send @sid, \SVINFO 6 6 0 Math.floor Date.now! / 1000
+
+      @on \SID !(link, name, hops, sid, desc) ->
+        @servers[sid] = serv = new Server {conn: @, link, sid, name, desc}
+        @emit \server serv
+
+      @on \UID !(sid, nick, hops, ts, modes, user, host, ip, uid, gecos) ->
+        user = new User {conn: @, sid, nick, ts, user, host, ip, uid, gecos}
+        user.parse_mode modes
+        @users[uid] = user
+        @servers[sid]users[uid] = true
+        @emit \user user
+
+      @on \SJOIN !(sid, ts, name, modes, ...params, nicklist) ->
+        @chans[name] = chan = new Channel {conn: @, name, ts}
+        chan.parse_mode modes, ...params
+        chan.parse_sjoin nicklist
+    
+      @on \TMODE !(prefix, ts, name, modes, ...params) ->
+        @chans[name]parse_mode modes, ...params
+    
+      @on \BMASK !(sid, name, type, masks) ->
+        @chans[name]parse_bmask type, masks
+    
+      @on \MODE !(uid, client, modes) ->
+        if uid === client
+          @users[uid]parse_mode modes
+    
+      @on \AWAY !(uid, reason) ->
+        @users[uid]away = reason
+    
+      @on \JOIN !(uid, ts, name, modes) ->
+        @users[uid]chans[name] = true
+        @chans[name]members[uid] = {}
+    
+      @on \KICK !(src, name, uid, reason) ->
+        delete @users[uid]chans[name]
+        delete @chans[name]members[uid]
+    
+      @on \KILL !(src, uid, path) ->
+        delete @users[uid]
+  
+    send: !(prefix, command, ...params) ->
+      @socket.write serialize {prefix, command, params}
+
+    ALPHABET = \ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+    next = (str) ->
+      c = str[str.length - 1]
+      if c == \Z
+        next(str.slice 0 -1) + \A
+      else
+        str.slice(0 -1) + ALPHABET[1 + ALPHABET.indexOf c]
+
+    next_id: ->
+      @current_id = next id = @current_id
+      id
